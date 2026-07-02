@@ -8,6 +8,11 @@ from app.extensions import db
 class User(db.Model):
     __tablename__ = "users"
 
+    ROLE_PATIENT = "patient"
+    ROLE_CLINICIAN = "clinician"
+    ROLE_ADMIN = "admin"
+    ALLOWED_ROLES = {ROLE_PATIENT, ROLE_CLINICIAN, ROLE_ADMIN}
+
     id = db.Column(db.Integer, primary_key=True)
     full_name = db.Column(db.String(120), nullable=False)
     email = db.Column(db.String(180), unique=True, nullable=False, index=True)
@@ -25,6 +30,22 @@ class User(db.Model):
     analyses = db.relationship("NailAnalysis", back_populates="user", lazy=True)
     feedback = db.relationship("AnalysisFeedback", back_populates="user", lazy=True)
 
+    @classmethod
+    def create(cls, full_name, email, password, role=ROLE_PATIENT):
+        user = cls(
+            full_name=full_name.strip(),
+            email=email.strip().lower(),
+            role=role if role in cls.ALLOWED_ROLES else cls.ROLE_PATIENT,
+        )
+        user.set_password(password)
+        return user
+
+    @classmethod
+    def find_by_email(cls, email):
+        if not email:
+            return None
+        return cls.query.filter_by(email=email.strip().lower()).first()
+
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
@@ -38,5 +59,9 @@ class User(db.Model):
             "email": self.email,
             "role": self.role,
             "is_active": self.is_active,
-            "created_at": self.created_at.isoformat(),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+    def __repr__(self):
+        return f"<User id={self.id} email={self.email}>"

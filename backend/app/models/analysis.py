@@ -6,6 +6,10 @@ from app.extensions import db
 class NailAnalysis(db.Model):
     __tablename__ = "nail_analyses"
 
+    STATUS_PENDING = "pending"
+    STATUS_COMPLETED = "completed"
+    STATUS_FAILED = "failed"
+
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
     original_filename = db.Column(db.String(255), nullable=False)
@@ -26,11 +30,31 @@ class NailAnalysis(db.Model):
     user = db.relationship("User", back_populates="analyses")
     feedback = db.relationship("AnalysisFeedback", back_populates="analysis", lazy=True)
 
+    @classmethod
+    def from_pipeline_result(cls, user_id, stored_image, pipeline_result):
+        return cls(
+            user_id=user_id,
+            original_filename=stored_image["original_filename"],
+            stored_filename=stored_image["stored_filename"],
+            image_path=stored_image["image_path"],
+            segmentation_mask_path=pipeline_result.get("segmentation_mask_path"),
+            heatmap_path=pipeline_result.get("heatmap_path"),
+            predicted_condition=pipeline_result.get("predicted_condition"),
+            confidence=pipeline_result.get("confidence"),
+            severity_score=pipeline_result.get("severity_score"),
+            severity_label=pipeline_result.get("severity_label"),
+            status=cls.STATUS_COMPLETED,
+            model_version=pipeline_result.get("model_version", "unconfigured"),
+            quality_metadata=stored_image.get("quality_metadata"),
+            report_json=pipeline_result.get("report"),
+        )
+
     def to_dict(self):
         return {
             "id": self.id,
             "user_id": self.user_id,
             "original_filename": self.original_filename,
+            "stored_filename": self.stored_filename,
             "predicted_condition": self.predicted_condition,
             "confidence": self.confidence,
             "severity_score": self.severity_score,
@@ -38,9 +62,17 @@ class NailAnalysis(db.Model):
             "status": self.status,
             "model_version": self.model_version,
             "quality_metadata": self.quality_metadata,
+            "artifacts": {
+                "image_path": self.image_path,
+                "segmentation_mask_path": self.segmentation_mask_path,
+                "heatmap_path": self.heatmap_path,
+            },
             "report": self.report_json,
-            "created_at": self.created_at.isoformat(),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+    def __repr__(self):
+        return f"<NailAnalysis id={self.id} user_id={self.user_id} status={self.status}>"
 
 
 class AnalysisFeedback(db.Model):
@@ -69,7 +101,7 @@ class AnalysisFeedback(db.Model):
             "rating": self.rating,
             "correction_label": self.correction_label,
             "comment": self.comment,
-            "created_at": self.created_at.isoformat(),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
 
