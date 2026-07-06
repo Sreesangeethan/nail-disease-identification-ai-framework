@@ -9,6 +9,7 @@ cors = CORS()
 
 
 def init_extensions(app):
+    """Initialize Flask extensions in one place for the application factory."""
     db.init_app(app)
     jwt.init_app(app)
     cors.init_app(app, resources={r"/api/*": {"origins": "*"}})
