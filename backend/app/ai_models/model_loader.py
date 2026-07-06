@@ -2,10 +2,12 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from threading import Lock
 
 
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
 
 
 @dataclass
@@ -28,31 +30,35 @@ class AIModelRegistry:
         self.logger = logger
         self._unet = None
         self._classifier = None
+        self._lock = Lock()
 
     def get_unet(self):
-        if self._unet is None:
-            self._unet = self._load_model("unet", self.config["UNET_MODEL_PATH"])
+        with self._lock:
+            if self._unet is None:
+                self._unet = self._load_model("unet", self.config["UNET_MODEL_PATH"])
         return self._unet
 
     def get_classifier(self):
-        if self._classifier is None:
-            self._classifier = self._load_model(
-                "classifier",
-                self.config["CLASSIFIER_MODEL_PATH"],
-            )
+        with self._lock:
+            if self._classifier is None:
+                self._classifier = self._load_model(
+                    "classifier",
+                    self.config["CLASSIFIER_MODEL_PATH"],
+                )
         return self._classifier
 
     def has_required_models(self):
-        return Path(self.config["UNET_MODEL_PATH"]).exists() and Path(
+        return Path(self.config["UNET_MODEL_PATH"]).is_file() and Path(
             self.config["CLASSIFIER_MODEL_PATH"]
-        ).exists()
+        ).is_file()
 
     def models_ready(self):
         return self.get_unet().is_loaded and self.get_classifier().is_loaded
 
     def reload(self):
-        self._unet = None
-        self._classifier = None
+        with self._lock:
+            self._unet = None
+            self._classifier = None
         return {
             "unet": self.get_unet(),
             "classifier": self.get_classifier(),
@@ -69,7 +75,7 @@ class AIModelRegistry:
 
     def _load_model(self, name, path):
         model_path = Path(path)
-        if not model_path.exists():
+        if not model_path.is_file():
             message = f"{name} model artifact not found at {model_path}"
             self.logger.warning(message)
             return ModelBundle(
@@ -81,9 +87,11 @@ class AIModelRegistry:
             )
 
         try:
+            self._import_tensorflow_cpu()
             from tensorflow.keras.models import load_model
 
             model = load_model(model_path, compile=False)
+            self._validate_model(model, name)
             self.logger.info("Loaded %s model from %s", name, model_path)
             return ModelBundle(
                 name=name,
@@ -102,6 +110,21 @@ class AIModelRegistry:
                 version=self.config["MODEL_VERSION"],
                 error=message,
             )
+
+    def _import_tensorflow_cpu(self):
+        import tensorflow as tf
+
+        try:
+            tf.config.set_visible_devices([], "GPU")
+        except RuntimeError as exc:
+            self.logger.warning("TensorFlow device visibility was already initialized: %s", exc)
+        except Exception as exc:
+            self.logger.warning("Unable to disable TensorFlow GPU devices: %s", exc)
+        return tf
+
+    def _validate_model(self, model, name):
+        if not hasattr(model, "predict"):
+            raise ValueError(f"{name} artifact is not a valid Keras inference model")
 
     def _bundle_status(self, bundle):
         return {
