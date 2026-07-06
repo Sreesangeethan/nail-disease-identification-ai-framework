@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
@@ -61,6 +62,7 @@ class StoredImage:
 
 
 def validate_image_file(file_storage, config):
+    """Validate an uploaded nail image without persisting it."""
     if not isinstance(file_storage, FileStorage) or not file_storage.filename:
         raise ValidationError("Image file is required")
 
@@ -89,6 +91,15 @@ def validate_image_file(file_storage, config):
         )
 
     image, image_format = _open_verified_rgb_image(content)
+    if image_format and image_format.lower() not in {"jpeg", "jpg", "png"}:
+        raise ValidationError(
+            "Unsupported image content",
+            {
+                "allowed_formats": ["JPEG", "PNG"],
+                "actual_format": image_format,
+            },
+        )
+
     width, height = image.size
     if width < config["MIN_IMAGE_WIDTH"] or height < config["MIN_IMAGE_HEIGHT"]:
         raise ValidationError(
@@ -125,13 +136,20 @@ def validate_image_file(file_storage, config):
 
 
 def save_image_upload(file_storage, config, validation=None):
+    """Validate and persist an uploaded image under the configured upload root."""
     validation = validation or validate_image_file(file_storage, config)
-    upload_dir = Path(config["UPLOAD_FOLDER"])
+    upload_dir = Path(config["UPLOAD_FOLDER"]).resolve()
+    dated_dir = upload_dir / datetime.utcnow().strftime("%Y/%m/%d")
     upload_dir.mkdir(parents=True, exist_ok=True)
+    dated_dir.mkdir(parents=True, exist_ok=True)
 
     extension = Path(validation.safe_filename).suffix.lower()
     stored_filename = f"{uuid4().hex}{extension}"
-    destination = upload_dir / stored_filename
+    destination = (dated_dir / stored_filename).resolve()
+    try:
+        destination.relative_to(upload_dir)
+    except ValueError as exc:
+        raise ValidationError("Resolved upload path is invalid") from exc
 
     file_storage.stream.seek(0)
     file_storage.save(destination)
@@ -145,7 +163,10 @@ def save_image_upload(file_storage, config, validation=None):
 
 
 def load_rgb_image(image_path):
-    return Image.open(image_path).convert("RGB")
+    try:
+        return Image.open(image_path).convert("RGB")
+    except (OSError, UnidentifiedImageError) as exc:
+        raise ValidationError("Stored image could not be opened") from exc
 
 
 def calculate_quality_scores(image):
