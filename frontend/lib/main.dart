@@ -18,7 +18,9 @@ class NailDiseaseApp extends StatefulWidget {
 }
 
 class _NailDiseaseAppState extends State<NailDiseaseApp> {
-  void _handleAuthenticated() => setState(() {});
+  void _handleAuthenticated() {
+    setState(() {});
+  }
 
   void _handleLogout() {
     widget.apiService.logout();
@@ -48,11 +50,14 @@ class _NailDiseaseAppState extends State<NailDiseaseApp> {
         ),
       ),
       home: widget.apiService.isAuthenticated
-          ? HomeScreen(apiService: widget.apiService, onLogout: _handleLogout)
+          ? HomeScreen(
+              apiService: widget.apiService,
+              onLogout: _handleLogout,
+            )
           : LoginScreen(
-        apiService: widget.apiService,
-        onAuthenticated: _handleAuthenticated,
-      ),
+              apiService: widget.apiService,
+              onAuthenticated: _handleAuthenticated,
+            ),
     );
   }
 }
