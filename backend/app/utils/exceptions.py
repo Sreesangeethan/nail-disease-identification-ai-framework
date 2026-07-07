@@ -6,6 +6,13 @@ class AppError(Exception):
         self.error_code = error_code
         self.details = details or {}
 
+    def to_dict(self):
+        return {
+            "code": self.error_code,
+            "message": self.message,
+            "details": self.details,
+        }
+
 
 class ValidationError(AppError):
     def __init__(self, message, details=None):
@@ -22,9 +29,24 @@ class ForbiddenError(AppError):
         super().__init__(message, 403, "FORBIDDEN", details)
 
 
+class ConflictError(AppError):
+    def __init__(self, message="Resource conflict", details=None):
+        super().__init__(message, 409, "CONFLICT", details)
+
+
 class NotFoundError(AppError):
     def __init__(self, message="Resource not found", details=None):
         super().__init__(message, 404, "NOT_FOUND", details)
+
+
+class StorageError(AppError):
+    def __init__(self, message="File storage failed", details=None):
+        super().__init__(message, 500, "STORAGE_ERROR", details)
+
+
+class DatabaseError(AppError):
+    def __init__(self, message="Database operation failed", details=None):
+        super().__init__(message, 500, "DATABASE_ERROR", details)
 
 
 class ModelUnavailableError(AppError):
