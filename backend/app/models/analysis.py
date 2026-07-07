@@ -77,6 +77,7 @@ class NailAnalysis(db.Model):
 
 class AnalysisFeedback(db.Model):
     __tablename__ = "analysis_feedback"
+
     id = db.Column(db.Integer, primary_key=True)
     analysis_id = db.Column(
         db.Integer,
